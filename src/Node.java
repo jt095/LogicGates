@@ -3,6 +3,7 @@ import java.awt.*;
 public class Node {
     private boolean value;
     private Point location;
+    private boolean input = false;
 
     public Node(Point location) {
         this.location = location;
@@ -18,5 +19,11 @@ public class Node {
 
     public boolean getValue() {
         return value;
+    }
+
+    public boolean hasInput() { return input; }
+
+    public void setInput(boolean hasInput) {
+        input = hasInput;
     }
 }

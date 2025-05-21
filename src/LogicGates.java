@@ -2,8 +2,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.ArrayList;
-import java.util.Objects;
-import java.util.function.Function;
 
 public class LogicGates extends JPanel {
     // keyboard inputs
@@ -17,7 +15,8 @@ public class LogicGates extends JPanel {
     private Node startNode;
     private Node endNode;
     private ArrayList<Wire> wires = new ArrayList<>();
-    private ArrayList<Node> nodes = new ArrayList<>();
+    private ArrayList<Node> individualNodes = new ArrayList<>();
+    private ArrayList<GenericChip> genericChips = new ArrayList<>();
 
     public LogicGates() {
         // Add a KeyListener to capture keyboard input
@@ -34,8 +33,13 @@ public class LogicGates extends JPanel {
         this.addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) {
                 pointStart = e.getPoint();
+                if (lastKeyPressed.equals("c")) {
+                    GenericChip c = new GenericChip("NAND", pointStart, ChipType.NAND);
+                    genericChips.add(c);
+                }
+                // first click on wire is the output node
                 if (lastKeyPressed.equals("w")) {
-                    startNode = checkForNode(pointStart);
+                    startNode = getOutputNode(pointStart);
                 }
                 repaint();
             }
@@ -43,16 +47,16 @@ public class LogicGates extends JPanel {
             public void mouseReleased(MouseEvent e) {
                 if (lastKeyPressed.equals("n")) {
                     Node n = new Node(pointStart);
-                    nodes.add(n);
+                    individualNodes.add(n);
                     System.out.printf("added new node at location: %s", n.getLocation());
                 } if (lastKeyPressed.equals("w")) {
                     if (startNode != null) {
-                        endNode = checkForNode(pointEnd);
+                        // mouse release is input node
+                        endNode = getInputNode(pointEnd);
                         if (endNode != null) {
                             Node[] outputs = new Node[]{endNode};
                             Wire w = new Wire(startNode, outputs, startNode.getLocation(), endNode.getLocation());
                             wires.add(w);
-
                         }
                     }
                 }
@@ -77,40 +81,72 @@ public class LogicGates extends JPanel {
 
     public void paint(Graphics g) {
         super.paint(g);
-        for(Node n : nodes) {
-            drawNode(g, n.getLocation());
+        setBackground(Color.DARK_GRAY);
+
+        for(Node n : individualNodes) {
+            drawIndividualNode(g, n.getLocation());
         }
         for (Wire w : wires) {
-            drawWire(g, w.start, w.end);
+            Wire.drawWire(g, w.start, w.end, w.getColor());
+        }
+        for (GenericChip c : genericChips) {
+            c.drawChip(g);
         }
         if (lastKeyPressed.equals("w")) {
-            drawWire(g, pointStart, pointEnd);
+            Wire.drawWire(g, pointStart, pointEnd, Color.LIGHT_GRAY);
         }
     }
 
-    private void drawNode(Graphics g, Point p) {
+    private void drawIndividualNode(Graphics g, Point p) {
         g.setColor(Color.BLUE);
         g.drawOval(p.x - nodeSize/2, p.y - nodeSize/2, nodeSize, nodeSize);
     }
 
-    private void drawWire(Graphics g, Point start, Point end) {
-        if (start == null || end == null) return;
-        g.setColor(Color.RED);
-        Point[] points = createWirePoints(start, end);
-        if (points.length == 2) {
-            g.drawLine(start.x, start.y, end.x, end.y);
-        } else {
-            g.drawLine(points[0].x, points[0].y, points[1].x, points[1].y);
-            g.drawLine(points[1].x, points[1].y, points[2].x, points[2].y);
-            g.drawLine(points[2].x, points[2].y, points[3].x, points[3].y);
+
+    private Node getInputNode(Point p) {
+        for (Node n : individualNodes) {
+            if (withinCircle(p, n.getLocation())) {
+                if (!n.hasInput()) {
+                    n.setInput(true);
+                    return n;
+                }
+                System.out.println("This node already has an input.");
+                return null;
+            }
         }
 
+        for (GenericChip c : genericChips) {
+            for (ChipNode n : c.getChipNodes()) {
+                if (withinCircle(p, n.getLocation())) {
+                    if (n.getSide().equals("input")) {
+                        if (!n.hasInput()) {
+                            n.setInput(true);
+                            return n;
+                        }
+                        System.out.println("This node already has an input.");
+                        return null;
+                    }
+                    System.out.println("This is an output only node.");
+                    return null;
+                }
+            }
+        }
+
+        return null;
     }
 
-    private Node checkForNode(Point p) {
-        for (Node n : nodes) {
+    private Node getOutputNode(Point p) {
+        for (Node n : individualNodes) {
             if (withinCircle(p, n.getLocation())) {
                 return n;
+            }
+        }
+
+        for (GenericChip c : genericChips) {
+            for (ChipNode n : c.getChipNodes()) {
+                if (withinCircle(p, n.getLocation())) {
+                    return n;
+                }
             }
         }
         return null;
@@ -124,18 +160,15 @@ public class LogicGates extends JPanel {
     }
 
     public static void main(String[] args) {
-        JFrame f = new JFrame("Draw a Red Line");
+        JFrame f = new JFrame("Create Circuits");
         f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        f.setSize(300, 300);
-        f.setLocation(300, 300);
+        f.setSize(1000, 1000);
+        f.setLocation(10, 10);
         f.setResizable(false);
         LogicGates panel = new LogicGates();
         f.add(panel);
+        f.getContentPane().setBackground(Color.BLACK);
         f.setVisible(true);
-
-
-
-        panel.repaint();       // Repaint the panel with the new state
 
 
 //        // create input board
@@ -158,17 +191,5 @@ public class LogicGates extends JPanel {
 
     }
 
-    public static Point[] createWirePoints(Point start, Point end) {
-        // create three lines to keep wire straightPoint[] points;
-        if (start.y == end.y) {
-            return new Point[] {start, end};
-        }
 
-        Point[] points = new Point[4];
-        points[0] = start;
-        points[3] = end;
-        points[1] = new Point((start.x + end.x)/2, start.y);
-        points[2] = new Point((start.x + end.x)/2, end.y);
-        return points;
-    }
 }
